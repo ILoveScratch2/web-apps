@@ -1,0 +1,106 @@
+name: Build and Publish Web-Apps
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-publish:
+    name: Build and Upload Artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    steps:
+      - name: Checkout Web-Apps
+        uses: actions/checkout@v4
+        with:
+          path: 'web-apps'
+          fetch-depth: 1
+
+      - name: Checkout SDKJS
+        uses: actions/checkout@v4
+        with:
+          repository: ONLYOFFICE/sdkjs
+          ref: master
+          path: 'sdkjs'
+          fetch-depth: 1
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build sprites
+        run: |
+          cd web-apps/build
+          chmod +x sprites.sh
+          ./sprites.sh
+
+      - name: Install dependencies
+        run: |
+          cd web-apps/build
+          npm install
+
+      - name: Build SDKJS
+        run: |
+          cd sdkjs/build
+          npm install
+          npx grunt
+
+      - name: Build Web-Apps
+        run: |
+          cd web-apps/build
+          npx grunt
+
+      - name: Package artifacts
+        run: |
+          cd web-apps
+          tar -czf ../web-apps-build.tar.gz deploy/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-apps-build-${{ github.sha }}
+          path: web-apps-build.tar.gz
+          retention-days: 30
+
+      - name: Prepare GitHub Pages content
+        run: |
+          mkdir -p gh-pages
+          cp -r web-apps/deploy/* gh-pages/
+          
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: gh-pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Generate build summary
+        run: |
+          echo "## Web-Apps Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: master" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifact Name**: web-apps-build-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Pages URL**: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Built Applications" >> $GITHUB_STEP_SUMMARY
+          echo "- Document Editor" >> $GITHUB_STEP_SUMMARY
+          echo "- Spreadsheet Editor" >> $GITHUB_STEP_SUMMARY
+          echo "- Presentation Editor" >> $GITHUB_STEP_SUMMARY
+          echo "- PDF Editor" >> $GITHUB_STEP_SUMMARY
+          echo "- Forms" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully deployed to GitHub Pages" >> $GITHUB_STEP_SUMMARY
